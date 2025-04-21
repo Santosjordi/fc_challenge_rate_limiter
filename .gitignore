@@ -23,3 +23,11 @@ go.work.sum
 
 # env file
 .env
+
+# ide specific
+.idx
+.idx*
+.idx/*
+.vscode
+.vscode*
+.vscode/*
