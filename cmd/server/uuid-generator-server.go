@@ -1,27 +1,32 @@
-package server
+package main
 
 import (
-	"encoding/json"
 	"log"
 	"net/http"
 
-	"github.com/google/uuid"
+	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/middleware"
+	"github.com/santosjordi/fc_challenge_rate_limiter/config"
+	"github.com/santosjordi/fc_challenge_rate_limiter/internal/webserver/handlers"
 )
 
-// This is a simple UUID generator server that generates UUIDs and returns them in JSON format.
 func main() {
-	// Start the server
-	http.HandleFunc("/generate", func(w http.ResponseWriter, r *http.Request) {
-		// Generate a new UUID
-		uuid := uuid.New()
 
-		// Return the UUID in JSON format
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"uuid": uuid.String()})
-	})
+	cfg, err := config.LoadConfig(".env")
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Printf("Loaded config: %+v\n", cfg)
+
+	r := chi.NewRouter()
+	r.Use(middleware.Logger)
+	// r.Use(middleware.RateLimiter)
+
+	r.Get("/generate", handlers.UuidHandler().ServeHTTP)
 
 	log.Println("Starting UUID generator server on :8080")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
+	// change the mux from the standard library to chi
+	if err := http.ListenAndServe(":8080", r); err != nil {
 		log.Fatal(err)
 	}
 }

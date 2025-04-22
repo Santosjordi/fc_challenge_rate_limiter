@@ -1,5 +1,4 @@
 # Setup a redis server
-version: '3.8'
 services:
   redis:
     image: redis:latest
@@ -11,6 +10,9 @@ services:
     networks:
       - redis_network
     restart: always
+    # You could add command here to configure Redis (optional)
+    # command: ["redis-server", "--requirepass", "yourpassword"]
+    
   redis-cli:
     image: redis:latest
     container_name: redis-cli
@@ -20,3 +22,11 @@ services:
       - redis_network
     restart: always
     entrypoint: ["redis-cli", "-h", "redis"]
+
+networks:
+  redis_network:
+    driver: bridge
+
+volumes:
+  redis_data:
+    driver: local
