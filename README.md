@@ -105,7 +105,6 @@ Architecture drawing:
 │       │   ├── 📄 uuid_handler.go
 │       │   └── 📄 uuid_handler_test.go
 │       ├── 📁 middleware
-│       │   ├── 📄 jwt_auth.go
 │       │   └── 📄 rate_limiter.go
 │       └── 📁 utils
 │           └── 📄 http_utils.go

@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
@@ -17,6 +19,9 @@ import (
 // It loads configuration, connects to Redis, sets up the chi router, and listens on port 8080.
 func main() {
 
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
 	cfg, err := config.LoadConfig(".env")
 	if err != nil {
 		log.Fatal(err)
@@ -30,9 +35,10 @@ func main() {
 	})
 
 	redisStorage := db.NewRedisStorage(redisClient)
-	if err := redisStorage.Ping(); err != nil {
+	if err := redisStorage.Ping(ctx); err != nil {
 		log.Fatalf("Failed to connect to Redis: %v", err)
 	}
+
 	rateLimiter := mw.NewRateLimitMiddleware(redisStorage, cfg)
 
 	r := chi.NewRouter()
