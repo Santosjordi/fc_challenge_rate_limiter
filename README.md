@@ -6,6 +6,162 @@ Anotações para documentar:
 - usar viper para acessar as variáveis de ambiente no `.env`
 
 ---
+## Flow Diagram
+
+```
+Request → Middleware Chain
+           ↓
+    1. Extract Identifier (IP/Token)
+           ↓
+    2. Check Lockout Status
+           ↓
+    3. Get Rate Limit Config
+           ↓
+    4. Apply Rate Limiting
+           ↓
+    5. Register Request
+           ↓
+    Next Handler/Response
+
+```
+
+Architecture drawing:
+```
++------------------------+            +------------------------+
+|     config.Config      |            |       Viper/.env       |
+|  [SRP]                 |<-----------+  Loads configuration   |
++------------------------+            +------------------------+
+
+         |
+         v
++------------------------+            +-------------------------+
+|     main.go            |            |    Redis DB             |
+|  [SRP]                 |            |                         |
+|  - Loads config        |            +-------------------------+
+|  - Instantiates        |
+|    limiter & middleware|
++-----------+------------+
+            |
+            v
++------------------------+           Implements
+|   RedisLimiter         |------------------------------+
+| [SRP, OCP, LSP]        |                              |
+|  - Implements          |                              |
+|    RateLimiter         |                              |
+|  - Talks to Redis      |                              v
++-----------+------------+                  +----------------------+
+            |                                |  RateLimiter        |
+            | Uses                           |  Interface          |
+            +------------------------------->|  [ISP, DIP]         |
+                                             +----------------------+
+                                                       ^
+                                                       |
+                             +-------------------------+
+                             |
+                             v
+                    +--------------------------+
+                    | RateLimitMiddleware      |
+                    | [SRP, OCP, DIP]          |
+                    | - Uses RateLimiter       |
+                    | - HTTP 429 on limit hit  |
+                    +-------------+------------+
+                                  |
+                                  v
+                         +------------------+
+                         |  HTTP Requests    |
+                         |  (via chi router) |
+                         +------------------+
+
+
+```
+
+
+---
+## Project Structure
+
+```
+📦 fc_challenge_rate_limiter
+├── 📁 cmd
+│   └── 📁 server
+│       └── 📄 uuid-generator-server.go
+├── 📁 config
+│   ├── 📄 README.md
+│   ├── 📄 config.go
+│   └── 📄 config_test.go
+├── 📁 docs
+│   ├── 📄 ASSIGNMENT.md
+│   ├── 📄 architecture.excalidraw
+│   └── 📁 gherkin
+│       └── 📁 features
+│           ├── 📄 rate_limiter.feature
+│           └── 📄 rate_limiter_test.go
+├── 📁 internal
+│   ├── 📁 infra
+│   │   └── 📁 db
+│   │       ├── 📄 interface.go
+│   │       └── 📄 redis_rate_limiter.go
+│   └── 📁 webserver
+│       ├── 📁 handlers
+│       │   ├── 📄 uuid_handler.go
+│       │   └── 📄 uuid_handler_test.go
+│       ├── 📁 middleware
+│       │   ├── 📄 jwt_auth.go
+│       │   └── 📄 rate_limiter.go
+│       └── 📁 utils
+│           └── 📄 http_utils.go
+├── 📁 pkg
+│   └── 📁 entity
+│       └── 📄 ID.go
+├── 📁 test
+│   └── 📁 testdata
+│       └── 📄 .env.test
+├── 📄 .env
+├── 📄 .gitignore
+├── 📄 README.md
+├── 📄 docker-compose.yml
+├── 📄 go.mod
+└── 📄 go.sum
+```
+
+
+---
+
+## Dependency Tree
+
+```
+Primary Dependencies:
+├── cmd/server/uuid-generator-server.go
+│   ├── config/config.go
+│   ├── internal/webserver/handlers/uuid_handler.go
+│   └── chi router (external)
+│
+├── internal/webserver/middleware/rate_limiter.go
+│   ├── internal/infra/db/interface.go
+│   ├── internal/webserver/utils/http_utils.go
+│   └── net/http (stdlib)
+│
+├── internal/infra/db/redis_rate_limiter.go
+│   ├── internal/infra/db/interface.go
+│   └── go-redis/v9 (external)
+│
+├── config/config.go
+│   ├── go-chi/jwtauth (external)
+│   └── spf13/viper (external)
+│
+└── pkg/entity/ID.go
+    └── google/uuid (external)
+
+External Dependencies:
+├── github.com/go-chi/chi v1.5.5
+├── github.com/go-chi/jwtauth v1.2.0
+├── github.com/google/uuid v1.6.0
+├── github.com/redis/go-redis/v9 v9.7.3
+└── github.com/spf13/viper v1.20.1
+
+```
+
+
+---
 
 ### Configuration
 

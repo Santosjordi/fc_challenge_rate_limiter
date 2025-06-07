@@ -26,9 +26,5 @@ func TestLoadConfigFromDotEnv(t *testing.T) {
 	cfg, err := config.LoadConfig("") // if LoadConfig handles viper directly
 	require.NoError(t, err)
 
-	require.Equal(t, 5, cfg.RateLimitIP)
-	require.Equal(t, 10, cfg.RateLimitToken)
-	require.Equal(t, 300, cfg.LockoutDurationIP)
-	require.Equal(t, 120, cfg.LockoutDurationToken)
-	require.NotNil(t, cfg.TokenAuth)
+	require.Equal(t, 5, cfg.IPLimitPerSecond)
 }

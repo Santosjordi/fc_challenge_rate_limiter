@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"encoding/json"
 	"net"
 	"net/http"
 	"strings"
@@ -15,6 +16,10 @@ func GetRateLimitKey(r *http.Request) string {
 		return clientIP
 	}
 	return apiKey
+}
+
+func IsTokenBasedKey(key string) bool {
+	return strings.HasPrefix(key, "token:")
 }
 
 func GetClientIP(r *http.Request) string {
@@ -36,6 +41,12 @@ func GetClientIP(r *http.Request) string {
 		return r.RemoteAddr // return as-is if splitting fails
 	}
 	return host
+}
+
+func RespondWithError(w http.ResponseWriter, code int, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	json.NewEncoder(w).Encode(map[string]string{"error": message})
 }
 
 // Check this back later for a less lazy implementation
