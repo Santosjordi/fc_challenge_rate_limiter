@@ -214,6 +214,22 @@ JWT_SECRET=mysecretkey
 If you're using a different backend (e.g., Memcached), just change the `BACKEND` variable accordingly, and add the configuration for that service (e.g., Memcached host and port).
 
 ---
+### Running
+
+Run the application from the project root:
+```bash
+go run cmd/server/uuid-generator-server.go
+```
+
+
+Use Apache Benchmark to load tests the application.
+
+```bash
+ab -n 100 -c 10 -H "API_KEY: mytoken" http://localhost:8080/generate
+
+```
+
+---
 
 ### Additional Notes
 

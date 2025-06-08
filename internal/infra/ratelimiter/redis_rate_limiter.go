@@ -16,7 +16,7 @@ package db
 
 import (
 	"context"
-	"encoding/json"
+	"log"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -43,45 +43,42 @@ func (r *RedisStorage) Ping(ctx context.Context) error {
 	return err
 }
 
-// CheckAndIncrement checks if the number of requests associated with the given key
-// has exceeded the allowed limit within a time window. It increments the request
-// count for the key in Redis and retrieves the maximum allowed requests. If this is
-// the first request, it sets an expiration for the key. The function returns whether
-// the request is allowed, the number of remaining requests, and any error encountered.
-//
-// Parameters:
-//
-//	ctx - context for controlling cancellation and deadlines.
-//	key - unique identifier for the rate limit.
-//
-// Returns:
-//
-//	allowed - true if the request is within the allowed limit, false otherwise.
-//	remaining - number of requests remaining before reaching the limit.
-//	err - error encountered during the operation, if any.
-func (r *RedisStorage) CheckAndIncrement(ctx context.Context, key string) (bool, int, error) {
+func (r *RedisStorage) CheckAndIncrement(ctx context.Context, key string, maxRequests int64, lockout time.Duration) (bool, int, error) {
+	// 1. Check if the key is locked out
+	locked, err := r.IsLockedOut(ctx, key)
+	if err != nil {
+		return false, 0, err
+	}
+	if locked {
+		return false, 0, nil
+	}
+
 	requestKey := requestsPrefix + key
 
+	// 2. Increment the request count
 	pipe := r.client.Pipeline()
 	incr := pipe.Incr(ctx, requestKey)
-	limit := pipe.Get(ctx, configPrefix+key)
-	_, err := pipe.Exec(ctx)
+	_, err = pipe.Exec(ctx)
 	if err != nil && err != redis.Nil {
 		return false, 0, err
 	}
 
 	count := incr.Val()
-	maxRequests := int64(0)
-	if limit.Err() == nil {
-		maxRequests, _ = limit.Int64()
-	}
 
-	// If this is first request, set expiration
+	// 3. Set expiration only on the first hit (1-second window)
 	if count == 1 {
-		r.client.Expire(ctx, requestKey, time.Minute)
+		r.client.Expire(ctx, requestKey, time.Second)
 	}
 
+	// 4. Determine if the request is allowed
 	allowed := maxRequests == 0 || count <= maxRequests
+
+	// 5. Optionally: apply lockout if limit is exceeded
+	if !allowed {
+		r.SetLockOut(ctx, key, lockout)
+	}
+
+	log.Println("CheckAndIncrement - key:", key, "count:", count, "maxRequests:", maxRequests, "allowed:", allowed)
 	return allowed, int(maxRequests - count), nil
 }
 
@@ -97,65 +94,10 @@ func (r *RedisStorage) SetLockOut(ctx context.Context, key string, duration time
 	return r.client.Set(ctx, lockoutPrefix+key, true, duration).Err()
 }
 
-func (r *RedisStorage) GetRateLimit(ctx context.Context, key string) (RateLimit, error) {
-	var rateLimit RateLimit
-
-	// Get current request count
-	requestCount, err := r.client.Get(ctx, requestsPrefix+key).Int()
-	if err != nil && err != redis.Nil {
-		return rateLimit, err
-	}
-
-	// Get lockout status
-	isLocked, ttl, err := r.getLockoutStatus(ctx, key)
-	if err != nil {
-		return rateLimit, err
-	}
-
-	// Get stored config
-	configJSON, err := r.client.Get(ctx, configPrefix+key).Result()
-	if err != nil && err != redis.Nil {
-		return rateLimit, err
-	}
-
-	if err == redis.Nil {
-		// Return default config
-		return RateLimit{
-			WindowSize:      time.Minute,
-			MaxRequests:     60,
-			LockoutDuration: time.Minute * 5,
-			CurrentRequests: requestCount,
-			IsLocked:        isLocked,
-			LockedUntil:     time.Now().Add(ttl),
-		}, nil
-	}
-
-	if err := json.Unmarshal([]byte(configJSON), &rateLimit); err != nil {
-		return rateLimit, err
-	}
-
-	rateLimit.CurrentRequests = requestCount
-	rateLimit.IsLocked = isLocked
-	rateLimit.LockedUntil = time.Now().Add(ttl)
-
-	return rateLimit, nil
-}
-
 func (r *RedisStorage) Reset(ctx context.Context, key string) error {
 	pipe := r.client.Pipeline()
 	pipe.Del(ctx, requestsPrefix+key)
 	pipe.Del(ctx, lockoutPrefix+key)
 	_, err := pipe.Exec(ctx)
 	return err
-}
-
-func (r *RedisStorage) getLockoutStatus(ctx context.Context, key string) (bool, time.Duration, error) {
-	pipe := r.client.Pipeline()
-	exists := pipe.Exists(ctx, lockoutPrefix+key)
-	ttl := pipe.TTL(ctx, lockoutPrefix+key)
-	_, err := pipe.Exec(ctx)
-	if err != nil {
-		return false, 0, err
-	}
-	return exists.Val() > 0, ttl.Val(), nil
 }

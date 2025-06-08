@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -10,10 +11,13 @@ import (
 	"github.com/santosjordi/fc_challenge_rate_limiter/internal/webserver/utils"
 )
 
+// O rate limiter deve permitir a configuração do número máximo de requisições permitidas por segundo.
 type RateLimitMiddleware struct {
 	storage db.RateLimiter
 	config  *config.Config
 }
+
+// Requisito: O rate limiter deve poder trabalhar como um middleware que é injetado ao servidor web
 
 func NewRateLimitMiddleware(storage db.RateLimiter, config *config.Config) *RateLimitMiddleware {
 	return &RateLimitMiddleware{
@@ -33,26 +37,33 @@ func (m *RateLimitMiddleware) Handler(next http.Handler) http.Handler {
 		ctx := r.Context()
 		key := utils.GetRateLimitKey(r)
 
-		allowed, remaining, err := m.storage.CheckAndIncrement(ctx, key)
+		var limit int64
+		var lockoutDuration time.Duration
+
+		if utils.IsTokenBasedKey(key) {
+			limit = int64(m.config.TokenRequestPerSecond)
+			lockoutDuration = m.config.TokenLockoutDuration
+		} else {
+			limit = int64(m.config.IPRequestPerSecond)
+			lockoutDuration = m.config.IPLockoutDuration
+		}
+
+		allowed, remaining, err := m.storage.CheckAndIncrement(ctx, key, limit, lockoutDuration)
 		if err != nil {
 			utils.RespondWithError(w, http.StatusInternalServerError, "rate limit check failed")
 			return
 		}
 
 		if !allowed {
-			// Use appropriate lockout duration based on key type
-			lockoutDuration := m.getLockoutDuration(key)
-			m.storage.SetLockOut(ctx, key, lockoutDuration)
-
 			w.Header().Set("X-RateLimit-Reset", time.Now().Add(lockoutDuration).Format(time.RFC3339))
-			utils.RespondWithError(w, http.StatusTooManyRequests, "rate limit exceeded")
+			utils.RespondWithError(w, http.StatusTooManyRequests, "you have reached the maximum number of requests or actions allowed within a certain time frame")
 			return
 		}
 
 		// Add rate limit headers with appropriate limits based on key type
-		maxRequests := m.config.IPLimitPerSecond
+		maxRequests := m.config.IPRequestPerSecond
 		if utils.IsTokenBasedKey(key) {
-			maxRequests = m.config.TokenLimitPerSecond
+			maxRequests = m.config.TokenRequestPerSecond
 		}
 
 		w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(remaining))
@@ -64,7 +75,9 @@ func (m *RateLimitMiddleware) Handler(next http.Handler) http.Handler {
 
 func (m *RateLimitMiddleware) getLockoutDuration(key string) time.Duration {
 	if utils.IsTokenBasedKey(key) {
+		log.Printf("Using token lockout duration: %v for key: %s", m.config.TokenLockoutDuration, key)
 		return m.config.TokenLockoutDuration
 	}
+	log.Printf("Using IP lockout duration: %v for key: %s", m.config.IPLockoutDuration, key)
 	return m.config.IPLockoutDuration
 }
