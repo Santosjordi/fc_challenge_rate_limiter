@@ -4,6 +4,9 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/go-chi/chi"
@@ -33,7 +36,7 @@ func main() {
 	redisClient := redis.NewClient(&redis.Options{
 		Addr:     cfg.RedisHost + ":" + cfg.RedisPort,
 		Password: cfg.RedisPassword,
-		DB:       cfg.RedisDB, // use default DB
+		DB:       cfg.RedisDB,
 	})
 
 	log.Println("Pinging Redis to verify connection...")
@@ -49,14 +52,39 @@ func main() {
 	log.Println("Setting up HTTP router and middleware...")
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
-	// O rate limiter deve poder trabalhar como um middleware que é injetado ao servidor web
 	r.Use(rateLimiter.Handler)
 
 	log.Println("Registering /generate endpoint handler...")
 	r.Get("/generate", handlers.UuidHandler().ServeHTTP)
 
+	server := &http.Server{
+		Addr:    ":" + cfg.ServerPort,
+		Handler: r,
+	}
+
+	// Channel to listen for interrupt or terminate signals"""
+	idleConnsClosed := make(chan struct{})
+	go func() {
+		// Listen for SIGINT or SIGTERM
+		sigCh := make(chan os.Signal, 1)
+		signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+		sig := <-sigCh
+		log.Printf("Received signal %v, initiating graceful shutdown...", sig)
+
+		// Create context with timeout for shutdown
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer shutdownCancel()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			log.Printf("HTTP server Shutdown: %v", err)
+		}
+		close(idleConnsClosed)
+	}()
+
 	log.Printf("Starting UUID generator server on :%s", cfg.ServerPort)
-	if err := http.ListenAndServe(":"+cfg.ServerPort, r); err != nil {
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("Server failed to start: %v", err)
 	}
+
+	<-idleConnsClosed
+	log.Println("Server gracefully stopped.")
 }

@@ -2,7 +2,6 @@ package utils
 
 import (
 	"encoding/json"
-	"log"
 	"net"
 	"net/http"
 	"strings"
@@ -11,7 +10,6 @@ import (
 func GetRateLimitKey(r *http.Request) string {
 	clientIP := GetClientIP(r)
 	apiKey := r.Header.Get("API_KEY")
-	log.Println("Client IP:", clientIP, "API Key:", apiKey)
 	// API_KEY supercedes the client IP address if the API_KEY is not empty
 	if apiKey != "" {
 		return "token:" + apiKey

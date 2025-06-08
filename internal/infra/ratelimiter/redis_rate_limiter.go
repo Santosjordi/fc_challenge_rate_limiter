@@ -16,7 +16,6 @@ package db
 
 import (
 	"context"
-	"log"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -77,8 +76,6 @@ func (r *RedisStorage) CheckAndIncrement(ctx context.Context, key string, maxReq
 	if !allowed {
 		r.SetLockOut(ctx, key, lockout)
 	}
-
-	log.Println("CheckAndIncrement - key:", key, "count:", count, "maxRequests:", maxRequests, "allowed:", allowed)
 	return allowed, int(maxRequests - count), nil
 }
 
