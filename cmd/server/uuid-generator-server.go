@@ -13,13 +13,21 @@ import (
 	"github.com/go-chi/chi/middleware"
 	"github.com/redis/go-redis/v9"
 	"github.com/santosjordi/fc_challenge_rate_limiter/config"
+	_ "github.com/santosjordi/fc_challenge_rate_limiter/docs"
 	db "github.com/santosjordi/fc_challenge_rate_limiter/internal/infra/ratelimiter"
 	"github.com/santosjordi/fc_challenge_rate_limiter/internal/webserver/handlers"
 	mw "github.com/santosjordi/fc_challenge_rate_limiter/internal/webserver/middleware"
+	httpSwagger "github.com/swaggo/http-swagger"
 )
 
 // main starts the UUID generator HTTP server with rate limiting and logging middleware.
 // It loads configuration, connects to Redis, sets up the chi router, and listens on port 8080.
+
+// @title UUID Generator API
+// @version 1.0
+// @description This API generates UUIDs and demonstrates a rate limiter middleware.
+// @host localhost:8080
+// @BasePath /
 func main() {
 	log.Println("Initializing context with timeout...")
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -53,6 +61,13 @@ func main() {
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Use(rateLimiter.Handler)
+
+	r.Get("/swagger/*", httpSwagger.WrapHandler)
+
+	// Redirects requests from "/" to "/swagger/index.html".
+	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/swagger/index.html", http.StatusFound)
+	})
 
 	log.Println("Registering /generate endpoint handler...")
 	r.Get("/generate", handlers.UuidHandler().ServeHTTP)

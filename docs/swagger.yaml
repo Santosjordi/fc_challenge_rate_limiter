@@ -1,0 +1,32 @@
+basePath: /
+host: localhost:8080
+info:
+  contact: {}
+  description: This API generates UUIDs and demonstrates a rate limiter middleware.
+  title: UUID Generator API
+  version: "1.0"
+paths:
+  /generate:
+    get:
+      consumes:
+      - application/json
+      description: Returns a new UUID if the request is within rate limits.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: UUID generated
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "429":
+          description: Rate limit exceeded
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Generate UUID
+      tags:
+      - uuid
+swagger: "2.0"
