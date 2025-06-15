@@ -1,8 +1,56 @@
-## ⚙️ Fullcycle Technical challenge -> Rate Limiter: How It Works & How to Configure It
+# ⚙️ Fullcycle Technical challenge -> Rate Limiter: How It Works & How to Configure It
 
-### UUID Generator
+## UUID Generator
 
+#### 1. **Setup**
 The server of this project has a simple endpoint `\generate` which returns an uuid.
+
+- Ensure you have Docker and Docker Compose installed.
+- From the project root, start the required services (including Redis) with:
+  ```bash
+  docker-compose up -d
+  ```
+- Build and run the server (if not using Docker Compose for the app):
+  ```bash
+  go run ./cmd/server/uuid-generator-server.go
+  ```
+  The server will listen on port `8080` by default.
+
+#### 2. **Configuration**
+
+- All rate limiter settings are controlled via the `.env` file in the project root.
+- You can adjust limits and lockout durations for both IP and token-based requests by editing this file before starting the server.
+
+#### 3. **Testing the Endpoints**
+
+- The main endpoint is:
+  ```
+  GET /generate
+  ```
+  This returns a UUID if the request is allowed.
+
+- **Test IP-based limiting:**
+  - Use a tool like `ab` (ApacheBench) or `curl` in a loop to send more requests per second than allowed by `IP_LIMIT_PER_SECOND`.
+  - Example:
+    ```bash
+    ab -n 20 -c 5 http://localhost:8080/generate
+    ```
+  - After exceeding the limit, you should receive HTTP 429 responses with the message:
+    ```
+    you have reached the maximum number of requests or actions allowed within a certain time frame
+    ```
+
+- **Test Token-based limiting:**
+  - Add the `API_KEY` header to your requests.
+    ```bash
+    ab -n 20 -c 5 -H "API_KEY: mytoken123" http://localhost:8080/generate
+    ```
+  - The token limit (`TOKEN_LIMIT_PER_SECOND`) will override the IP limit for requests with a valid token.
+
+- **Test Lockout:**
+  - After exceeding the limit, further requests should be blocked for the configured lockout duration (`IP_LOCKOUT_SECONDS` or `TOKEN_LOCKOUT_SECONDS`).
+  - After the lockout period, requests should be allowed again.
+
 
 ### 🚦 How the Rate Limiter Works
 
